@@ -1,27 +1,21 @@
-import numpy as np
 import pickle
+from typing import List, Tuple, Union
 
-import psycopg2 as pg
-import pandas.io.sql as psql
+import numpy as np
 import pandas as pd
+import pandas.io.sql as psql
+import sqlalchemy
+from sqlalchemy import create_engine, text
 
-from typing import Union, List, Tuple
-
+connector = "postgresql"
+user = "postgres"
+password = "9731"
 host = "localhost"
 port = "5432"
 dbname = "dvdrental"
-user = "postgres"
-password = "9731"
 
-connector = "postgresql"
-
-connection = pg.connect(
-    host=host,
-    port=port,
-    dbname=dbname,
-    user=user,
-    password=password,
-)
+db_string = f"{connector}://{user}:{password}@{host}:{port}/{dbname}"
+db = create_engine(db_string)
 
 
 def film_in_category(category_id: int) -> pd.DataFrame:
@@ -40,14 +34,30 @@ def film_in_category(category_id: int) -> pd.DataFrame:
     Returns:
     pd.DataFrame: DataFrame zawierający wyniki zapytania
     """
-    if not isinstance(category_id, int) or not (category_id > 1):
+    if not isinstance(category_id, int) or not (category_id >= 0):
         return None
-    command = """
-    --sql
-    select title, language, category from ... SORT BY title, language
+
+    query = text(
+        """
+        --sql
+        SELECT f.title, l.name AS language, c.name AS category 
+        FROM film f
+        JOIN language l ON f.language_id = l.language_id
+        JOIN film_category fc ON f.film_id = fc.film_id
+        JOIN category c ON fc.category_id = c.category_id
+        WHERE c.category_id = :cat_id
+        ORDER BY f.title, l.name
+
     """
-    df = pd.read_sql(command, con=connection)
-    return df
+    )
+
+    try:
+        with db.connect() as conn:
+            df = pd.read_sql(query, conn, params={"cat_id": category_id})
+            return df
+    except Exception as e:
+        print(e)
+        return None
 
 
 def client_from_city(city: str) -> pd.DataFrame:
@@ -66,8 +76,25 @@ def client_from_city(city: str) -> pd.DataFrame:
     Returns:
     pd.DataFrame: DataFrame zawierający wyniki zapytania
     """
-
-    pass
+    if not isinstance(city, str):
+        return None
+    query = text(
+        """
+    SELECT c.city as city, cus.first_name as first_name, cus.last_name as last_name 
+    FROM customer cus
+    JOIN address adr ON cus.address_id = adr.address_id
+    JOIN city c ON adr.city_id = c.city_id
+    WHERE c.city = :city
+    ORDER BY last_name, first_name
+"""
+    )
+    try:
+        with db.connect() as conn:
+            df = pd.read_sql(query, conn, params={"city": city})
+            return df
+    except Exception as e:
+        print(e)
+        return None
 
 
 def actor_in_film(title: str) -> pd.DataFrame:
@@ -86,7 +113,25 @@ def actor_in_film(title: str) -> pd.DataFrame:
     Returns:
     pd.DataFrame: DataFrame zawierający wyniki zapytania
     """
-    pass
+    if not isinstance(title, str):
+        return None
+    query = text(
+        """
+    SELECT film.title AS title, act.first_name AS name, act.last_name AS surname
+    FROM actor act
+    JOIN film_actor fact ON act.actor_id = fact.actor_id
+    JOIN film ON fact.film_id = film.film_id
+    WHERE film.title = :title
+    ORDER BY last_name
+"""
+    )
+    try:
+        with db.connect() as conn:
+            df = pd.read_sql(query, conn, params={"title": title})
+            return df
+    except Exception as e:
+        print(e)
+        return None
 
 
 def film_in_language(language: str) -> pd.DataFrame:
@@ -105,7 +150,24 @@ def film_in_language(language: str) -> pd.DataFrame:
     Returns:
     pd.DataFrame: DataFrame zawierający wyniki zapytania
     """
-    pass
+    if not isinstance(language, str):
+        return None
+    query = text(
+        """
+    SELECT l.name AS language, f.title AS title
+    FROM film f
+    JOIN language l ON f.language_id = l.language_id
+    WHERE l.name = :language
+    ORDER BY f.title
+    """
+    )
+    try:
+        with db.connect() as conn:
+            df = pd.read_sql(query, conn, params={"language": language})
+            return df
+    except Exception as e:
+        print(e)
+        return None
 
 
 if __name__ == "__main__":
