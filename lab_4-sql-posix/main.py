@@ -11,13 +11,20 @@ import pandas as pd
 from sqlalchemy import URL, create_engine, text
 import re
 
+connector = "postgresql+psycopg2"
+username = "postgres"
+password = "9731"
+host = "localhost"
+port = 5432
+dbname = "dvdrental"
+
 db_url = URL.create(
-    drivername="postgresql+psycopg2",
-    username="wbauer_adb",
-    password="adb2020",
-    host="pgsql-196447.vipserv.org",
-    port=5432,
-    database="wbauer_adb_2023",
+    drivername=connector,
+    username=username,
+    password=password,
+    host=host,
+    port=port,
+    database=dbname,
 )
 engine = create_engine(db_url)
 
@@ -49,11 +56,39 @@ def film_in_category(
         pd.DataFrame: DataFrame zawierający wyniki zapytania.
         Jeżeli dane wejściowe są niepoprawne funkcja zwraca `None`.
     """
-    pass
+    if not isinstance(category, (str, int)) or not isinstance(case_sensitive, bool):
+        return None
+    if isinstance(category, int):
+        sql_query = text(
+            """--sql
+        SELECT f.title, l.name, f_cat.category_id
+        FROM film f
+        JOIN language l ON f.language_id = l.language_id
+        JOIN film_category f_cat ON f.film_id = f_cat.film_id
+        WHERE category_id = :category
+        ORDER BY f.title, l.name
+    """
+        )
+    elif isinstance(category, str):
+        method = "LIKE" if case_sensitive else "ILIKE"
+        sql_query = text(
+            f"""--sql
+        SELECT f.title, l.name, c.name
+        FROM film f
+        JOIN language l ON f.language_id = l.language_id
+        JOIN film_category f_cat ON f.film_id = f_cat.film_id
+        JOIN category c ON f_cat.category_id = c.category_id 
+        WHERE c.name {method} :category 
+        ORDER BY f.title, l.name
+    """
+        )
+
+    df = pd.read_sql(sql_query, con=engine, params={"category": category})
+    return df
 
 
 def film_cast(title: str) -> pd.DataFrame | None:
-    """Funkcja zwracająca wynik zapytania do bazy o obsadę filmu o zadanym 
+    """Funkcja zwracająca wynik zapytania do bazy o obsadę filmu o zadanym
     tytule.
 
     Przykład wynikowej tabeli:
@@ -73,7 +108,22 @@ def film_cast(title: str) -> pd.DataFrame | None:
         pd.DataFrame: DataFrame zawierający wyniki zapytania.
         Jeżeli dane wejściowe są niepoprawne funkcja zwraca `None`.
     """
-    pass
+    if not isinstance(title, str):
+        return None
+    sql_query = text(
+        """--sql
+        SELECT f.title, a.first_name, a.last_name
+        FROM film f
+        JOIN film_actor fa ON f.film_id = fa.film_id
+        JOIN actor a ON fa.actor_id = a.actor_id
+        WHERE f.title 'LIKE' :title
+        ORDER BY a.last_name, a.first_name
+
+    """
+    )
+
+    df = pd.read_sql(sql_query, con=engine, params={"title": title})
+    return df
 
 
 def film_title_case_insensitive(words: list[str]) -> pd.DataFrame | None:
