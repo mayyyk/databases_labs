@@ -116,7 +116,7 @@ def film_cast(title: str) -> pd.DataFrame | None:
         FROM film f
         JOIN film_actor fa ON f.film_id = fa.film_id
         JOIN actor a ON fa.actor_id = a.actor_id
-        WHERE f.title 'LIKE' :title
+        WHERE f.title LIKE :title
         ORDER BY a.last_name, a.first_name
 
     """
@@ -148,4 +148,19 @@ def film_title_case_insensitive(words: list[str]) -> pd.DataFrame | None:
         Jeżeli dane wejściowe są niepoprawne funkcja zwraca `None`.
 
     """
-    pass
+    if not isinstance(words, list):
+        return None
+
+    pattern = "|".join(words)
+
+    sql_query = text(
+        """--sql
+        SELECT title
+        from film
+        WHERE title ~* :words
+        ORDER BY title
+    """
+    )
+
+    df = pd.read_sql(sql_query, con=engine, params={"words": pattern})
+    return df
